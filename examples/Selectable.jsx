@@ -1,6 +1,6 @@
 import PropTypes from 'prop-types';
 import React, { PureComponent } from 'react';
-import ReactDOM from 'react-dom';
+import ReactDOM, { findDOMNode } from 'react-dom';
 import Table from '../src';
 import Checkbox from './Checkbox';
 import styles from './index.styl';
@@ -13,6 +13,9 @@ class Selectable extends PureComponent {
     };
 
     state = {
+        page: 1,
+        topHeight: 0,
+        bottomHeight: 0,
         data: this.props.data
     };
     node = {
@@ -120,17 +123,90 @@ class Selectable extends PureComponent {
     componentDidUpdate() {
         this.props.onUpdateEnd();
     }
+
+    componentDidMount() {
+        const el = findDOMNode(this);
+        const theadHeight = el.querySelector('[class^="thead---"]').offsetHeight;
+        const rowHeight = el.querySelector('[class^="tbody---"] [class^="tr---"]').offsetHeight;
+        const total = this.state.data.length;
+        const fullHeight = total * rowHeight + theadHeight;
+
+        this.fullHeight = fullHeight - el.clientHeight;
+        this.rowHeight = rowHeight;
+        this.rowsHeight = rowHeight * this.rows;
+        this.theadHeight = theadHeight;
+
+        this.setState({
+            bottomHeight: this.fullHeight
+        });
+    }
+
+    skip = false
+    range = 30
+    rows = 10
+    lastScrollTop = 0
+
+    handleScroll = (ev) => {
+        const { scrollTop } = ev.currentTarget;
+        const { page } = this.state;
+
+        const scrollDir = scrollTop < this.lastScrollTop ? 'u' : 'd';
+        const pagesHeight = this.rowsHeight * page + this.theadHeight * page;
+
+        console.log({
+            page,
+            scrollTop,
+            pagesHeight,
+            up: pagesHeight - this.rowsHeight
+        });
+
+        if (scrollDir === 'd' && scrollTop >= pagesHeight) {
+            const topHeight = pagesHeight;
+            this.setState({
+                page: page + 1,
+                topHeight,
+                bottomHeight: this.fullHeight - topHeight
+            });
+        } else if (scrollDir === 'u' && page > 1 && scrollTop <= pagesHeight - this.rowsHeight) {
+            const p = page - 1;
+            const topHeight = this.rowsHeight * (p - 1);
+            this.setState({
+                page: p,
+                topHeight,
+                bottomHeight: this.fullHeight - topHeight
+            });
+        }
+
+        this.lastScrollTop = scrollTop;
+    }
     render() {
+        const { page, topHeight, bottomHeight } = this.state;
+
+        const from = this.rows * (page - 1);
+        const end = from + this.range;
+
         return (
-            <Table
-                justified={false}
-                rowKey="id"
-                columns={this.columns}
-                data={this.state.data}
-                rowClassName={this.getRowClassName}
-                onRowClick={this.onRowClick}
-                maxHeight={400}
-            />
+            <div
+                className={styles.root}
+                onScroll={this.handleScroll}
+            >
+
+                <div style={{ height: topHeight }} />
+                <Table
+                    justified={false}
+                    rowKey="id"
+                    columns={this.columns}
+                    data={this.state.data.slice(from, end)}
+                    rowClassName={this.getRowClassName}
+                    onRowClick={this.onRowClick}
+                    // maxHeight={400}
+                    style={{
+                        overflow: 'hidden'
+                    }}
+                />
+                <div style={{ height: bottomHeight }} />
+            </div>
+
         );
     }
 
